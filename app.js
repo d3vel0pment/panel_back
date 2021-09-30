@@ -6,6 +6,19 @@ const jwt = require("jsonwebtoken");
 const entrySchema = require("./models/entrySchema");
 const profileSchema = require("./models/profileSchema");
 
+const sameDay = (d1, d2) => {
+  return (
+    d1.getFullYear() === d2.getFullYear() &&
+    d1.getMonth() === d2.getMonth() &&
+    d1.getDate() === d2.getDate()
+  );
+};
+const sameMonth = (d1, d2) => {
+  return (
+    d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth()
+  );
+};
+
 require("dotenv").config();
 
 const app = express();
@@ -23,9 +36,50 @@ app.get("/", (_, res) => {
 app.get("/list", async (_, res) => {
   try {
     const everythingFound = await entrySchema.find({});
-    res.status(200).send(everythingFound);
+    let amount = 0;
+    let forms = 0;
+    let redirects = 0;
+    let today = 0;
+    let ccThisYear = [];
+    let allMonthsThisYear = new Set();
+    let allDaysThisMonth = new Set();
+    let entriesByMonths = [];
+    let entriesByDays = [];
+    everythingFound.forEach((x) => {
+      ccThisYear.push(x.createdAt);
+      x.type === "Redirect" ? redirects++ : forms++;
+      amount++;
+      sameDay(new Date(), new Date(x.createdAt)) ? today++ : 0;
+      sameMonth(new Date(), new Date(x.createdAt))
+        ? allDaysThisMonth.add(new Date(x.createdAt).getDate())
+        : 0;
+      new Date(x.createdAt).getFullYear() == new Date().getFullYear()
+        ? allMonthsThisYear.add(new Date(x.createdAt).getMonth())
+        : 0;
+    });
+    allMonthsThisYear.forEach((d) => {
+      entriesByMonths.push({
+        month: d,
+        entries: ccThisYear.filter((m) => new Date(m).getMonth() === d).length,
+      });
+    });
+    allDaysThisMonth.forEach((d) => {
+      entriesByDays.push({
+        day: d,
+        entries: ccThisYear.filter((m) => new Date(m).getDate() === d).length,
+      });
+    });
+    let stats = {
+      amount,
+      forms,
+      redirects,
+      today,
+      entriesByMonths,
+      entriesByDays,
+    };
+    res.status(200).json({ actualData: everythingFound, stats });
   } catch (error) {
-    res.status(501).send(error);
+    res.status(501).json(error);
   }
 });
 
@@ -69,6 +123,24 @@ app.post("/login", (req, res) => {
           res.status(201).json({ token: token.token, accessToken });
         })();
   });
+});
+
+app.post("/validate", (req, res) => {
+  req.body.accessToken
+    ? (() => {
+        jwt.verify(
+          JSON.parse(req.body.accessToken).accessToken,
+          process.env.TOKEN_KEY,
+          (err, decoded) => {
+            err
+              ? res.status(401).json({ verification: false })
+              : (() => {
+                  res.json({ verification: true });
+                })();
+          }
+        );
+      })()
+    : res.status(401).json({ verification: false });
 });
 
 app.post("/createToken", async (req, res) => {
