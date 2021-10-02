@@ -10,6 +10,6 @@
 
 ## ETC
 
-- [ ] Gate
-  - [ ] Tor connection
-  - [ ] Lohn CC validation
+- [x] Gate
+  - [x] Tor connection
+  - [x] Lohn CC validation

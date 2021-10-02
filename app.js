@@ -31,23 +31,27 @@ app.use(cors());
 async function verifyJWT(req, res, next) {
   try {
     if (req.body.token === undefined) {
-      next(new Error("Empty token."));
+      res.status(401).json({ success: false, message: "unauthorized" });
+      next();
     } else {
       let x = await profileSchema.findOne({ token: req.body.token });
       if (x === null) {
-        next(new Error("Invalid token."));
+        res.status(401).json({ success: false, message: "unauthorized" });
+        next();
       } else {
         jwt.verify(
           req.body.accessToken,
           process.env.TOKEN_KEY,
           (err, decoded) => {
-            err ? next(err) : next();
+            if (err)
+              res.status(401).json({ success: false, message: "unauthorized" });
+            return next();
           }
         );
       }
     }
   } catch (err) {
-    next(err);
+    return next(err);
   }
 }
 
@@ -59,59 +63,61 @@ mongoose.connect(process.env.MONGO_URI, () => {
   console.log("DB CONNECTED");
 });
 
-app.get("/", (_, res) => {
-  res.sendFile(__dirname + "/dist/index.html");
+const dataGen = (everythingFound) => {
+  let amount = 0;
+  let forms = 0;
+  let redirects = 0;
+  let today = 0;
+  let ccThisYear = [];
+  let allMonthsThisYear = new Set();
+  let allDaysThisMonth = new Set();
+  let entriesByMonths = [];
+  let entriesByDays = [];
+  everythingFound.forEach((x) => {
+    ccThisYear.push(x.createdAt);
+    x.type === "Redirect" ? redirects++ : forms++;
+    amount++;
+    sameDay(new Date(), new Date(x.createdAt)) ? today++ : 0;
+    sameMonth(new Date(), new Date(x.createdAt))
+      ? allDaysThisMonth.add(new Date(x.createdAt).getDate())
+      : 0;
+    new Date(x.createdAt).getFullYear() == new Date().getFullYear()
+      ? allMonthsThisYear.add(new Date(x.createdAt).getMonth())
+      : 0;
+  });
+  allMonthsThisYear.forEach((d) => {
+    entriesByMonths.push({
+      month: d + 1,
+      entries: ccThisYear.filter((m) => new Date(m).getMonth() === d).length,
+    });
+  });
+  allDaysThisMonth.forEach((d) => {
+    entriesByDays.push({
+      day: d,
+      entries: ccThisYear.filter((m) => new Date(m).getDate() === d).length,
+    });
+  });
+  let stats = {
+    amount,
+    forms,
+    redirects,
+    today,
+    entriesByMonths,
+    entriesByDays,
+  };
+  let v = everythingFound.filter((x) => x.archived === false);
+  return { actualData: v, stats };
+};
+
+app.get("/huy", (req, res) => {
+  res.json({});
 });
 
-app.post("/list", verifyJWT, async (_, res) => {
+app.post("/list", verifyJWT, async (req, res, next) => {
   try {
     const everythingFound = await entrySchema.find({});
-    let amount = 0;
-    let forms = 0;
-    let redirects = 0;
-    let today = 0;
-    let ccThisYear = [];
-    let allMonthsThisYear = new Set();
-    let allDaysThisMonth = new Set();
-    let entriesByMonths = [];
-    let entriesByDays = [];
-    everythingFound.forEach((x) => {
-      ccThisYear.push(x.createdAt);
-      x.type === "Redirect" ? redirects++ : forms++;
-      amount++;
-      sameDay(new Date(), new Date(x.createdAt)) ? today++ : 0;
-      sameMonth(new Date(), new Date(x.createdAt))
-        ? allDaysThisMonth.add(new Date(x.createdAt).getDate())
-        : 0;
-      new Date(x.createdAt).getFullYear() == new Date().getFullYear()
-        ? allMonthsThisYear.add(new Date(x.createdAt).getMonth())
-        : 0;
-    });
-    allMonthsThisYear.forEach((d) => {
-      entriesByMonths.push({
-        month: d + 1,
-        entries: ccThisYear.filter((m) => new Date(m).getMonth() === d).length,
-      });
-    });
-    allDaysThisMonth.forEach((d) => {
-      entriesByDays.push({
-        day: d,
-        entries: ccThisYear.filter((m) => new Date(m).getDate() === d).length,
-      });
-    });
-    let stats = {
-      amount,
-      forms,
-      redirects,
-      today,
-      entriesByMonths,
-      entriesByDays,
-    };
-    let v = everythingFound.filter((x) => x.archived === false);
-    res.status(200).json({ actualData: v, stats });
-  } catch (error) {
-    res.status(501).json(error);
-  }
+    res.status(201).json(dataGen(everythingFound));
+  } catch (error) {}
 });
 
 app.post("/create", async (req, res) => {
@@ -138,22 +144,24 @@ app.post("/create", async (req, res) => {
   }
 });
 
-app.post("/login", (req, res) => {
-  profileSchema.findOne({ token: req.body.token }).exec((err, token) => {
-    err ? res.status(500).json(err) : 0;
-    !token
-      ? res.status(400).json({})
+app.post("/sign", async (req, res, next) => {
+  try {
+    let u = await profileSchema.findOne({ token: req.body.token });
+    u === null || u === "null"
+      ? res.status(401).json()
       : (() => {
           const accessToken = jwt.sign(
-            { profile_id: token._id, profileToken: token.token },
+            { profile_id: u._id, profileToken: u.token },
             process.env.TOKEN_KEY,
             {
               expiresIn: "2h",
             }
           );
-          res.status(201).json({ token: token.token, accessToken });
+          res.status(201).json({ token: u.token, accessToken });
         })();
-  });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // app.post("/createToken", async (req, res) => {
@@ -199,6 +207,10 @@ app.post("/dl", verifyJWT, async (req, res) => {
     });
     res.status(200).json({ data: sArray.join("\n") });
   } catch (error) {}
+});
+
+app.get("/", (_, res) => {
+  res.status(200).sendFile(__dirname + "/dist/index.html");
 });
 
 app.use(history());
