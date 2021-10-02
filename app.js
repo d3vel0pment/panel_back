@@ -3,6 +3,9 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
+const serveStatic = require("serve-static");
+const history = require("connect-history-api-fallback");
+
 const entrySchema = require("./models/entrySchema");
 const profileSchema = require("./models/profileSchema");
 
@@ -229,6 +232,9 @@ app.post("/dl", async (req, res) => {
     res.status(501).json(error);
   }
 });
+
+app.use(history());
+app.use(serveStatic(__dirname + "/dist"));
 
 app.listen(process.env.PORT || 3000, () => {
   console.log(`STARTED AT ${process.env.PORT || 3000}`);
