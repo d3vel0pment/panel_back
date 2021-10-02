@@ -29,44 +29,41 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
 async function verifyJWT(req, res, next) {
-  // console.log(req.body);
-  // console.log(req.originalUrl);
-  req.originalUrl === "/" ? next() : 0;
-  req.originalUrl === "/login" ? next() : 0;
-  req.originalUrl === "/validate" ? next() : 0;
-  req.originalUrl === "/create" ? next() : 0;
   try {
-    let x = await profileSchema.findOne({ token: req.body.token });
-    if (x === null) {
-      next(new Error("Token is empty"));
+    if (req.body.token === undefined) {
+      next(new Error("Empty token."));
     } else {
-      jwt.verify(
-        req.body.accessToken,
-        process.env.TOKEN_KEY,
-        (err, decoded) => {
-          err ? next(err) : next();
-        }
-      );
+      let x = await profileSchema.findOne({ token: req.body.token });
+      if (x === null) {
+        next(new Error("Invalid token."));
+      } else {
+        jwt.verify(
+          req.body.accessToken,
+          process.env.TOKEN_KEY,
+          (err, decoded) => {
+            err ? next(err) : next();
+          }
+        );
+      }
     }
   } catch (err) {
     next(err);
   }
 }
 
-// app.use(verifyJWT);
-// app.use((err, req, res, next) => {
-//   err ? res.status(401).json({ success: false, message: err }) : next();
-// });
+app.use((err, req, res, next) => {
+  err ? res.status(401).json({ success: false, message: err }) : next();
+});
 
 mongoose.connect(process.env.MONGO_URI, () => {
   console.log("DB CONNECTED");
 });
 
 app.get("/", (_, res) => {
-  res.sendFile(__dirname + '/dist/index.html')
+  res.sendFile(__dirname + "/dist/index.html");
 });
 
-app.post("/list", async (_, res) => {
+app.post("/list", verifyJWT, async (_, res) => {
   try {
     const everythingFound = await entrySchema.find({});
     let amount = 0;
@@ -92,7 +89,7 @@ app.post("/list", async (_, res) => {
     });
     allMonthsThisYear.forEach((d) => {
       entriesByMonths.push({
-        month: d,
+        month: d + 1,
         entries: ccThisYear.filter((m) => new Date(m).getMonth() === d).length,
       });
     });
@@ -159,41 +156,16 @@ app.post("/login", (req, res) => {
   });
 });
 
-app.post("/createToken", async (req, res) => {
-  const reg = new profileSchema({
-    token: req.body.token,
-  });
-  try {
-    const savedEntry = await reg.save();
-    res.status(201).json(savedEntry);
-  } catch (error) {
-    res.status(501).json(error);
-  }
-});
-
-const moon = (setValue) => {
-  let ch = 0;
-  const num = String(setValue).replace(/\D/g, "");
-  const isOdd = num.length % 2 !== 0;
-
-  if ("" === num) return false;
-
-  for (let i = 0; i < num.length; i++) {
-    let n = parseInt(num[i], 10);
-
-    ch += (isOdd | 0) === i % 2 && 9 < (n *= 2) ? n - 9 : n;
-  }
-
-  return 0 === ch % 10;
-};
-
-// app.post("/gate", (req, res) => {
-//   let obj = JSON.parse(
-//     Buffer.from(req.body.captcha, "base64").toString("ascii")
-//   );
-//   console.log(moon(obj.ccNumber));
-//   console.log(moon('4561 2612 1234 5467'));
-//   res.status(200).json();
+// app.post("/createToken", async (req, res) => {
+//   const reg = new profileSchema({
+//     token: req.body.token,
+//   });
+//   try {
+//     const savedEntry = await reg.save();
+//     res.status(201).json(savedEntry);
+//   } catch (error) {
+//     res.status(501).json(error);
+//   }
 // });
 
 async function asyncForEach(array, callback) {
@@ -202,7 +174,7 @@ async function asyncForEach(array, callback) {
   }
 }
 
-app.post("/dl", async (req, res) => {
+app.post("/dl", verifyJWT, async (req, res) => {
   let startDate = new Date(req.body.start);
   let endDate = new Date(req.body.end);
   let sArray = [];
@@ -223,19 +195,14 @@ app.post("/dl", async (req, res) => {
             z.city || ""
           }|${z.state || ""}|${z.zip || ""}|${z.country || ""}|${z.email || ""}`
         );
-      } catch (error) {
-        res.status(501).json(error);
-      }
+      } catch (error) {}
     });
     res.status(200).json({ data: sArray.join("\n") });
-  } catch (error) {
-    res.status(501).json(error);
-  }
+  } catch (error) {}
 });
 
 app.use(history());
 app.use(express.static(__dirname + "/dist/"));
-
 
 app.listen(process.env.PORT || 3000, () => {
   console.log(`STARTED AT ${process.env.PORT || 3000}`);
