@@ -3,7 +3,6 @@ const mongoose = require("mongoose");
 const cors = require("cors");
 const jwt = require("jsonwebtoken");
 
-const serveStatic = require("serve-static");
 const history = require("connect-history-api-fallback");
 
 const entrySchema = require("./models/entrySchema");
@@ -32,6 +31,7 @@ app.use(cors());
 async function verifyJWT(req, res, next) {
   // console.log(req.body);
   // console.log(req.originalUrl);
+  req.originalUrl === "/" ? next() : 0;
   req.originalUrl === "/login" ? next() : 0;
   req.originalUrl === "/validate" ? next() : 0;
   req.originalUrl === "/create" ? next() : 0;
@@ -53,17 +53,17 @@ async function verifyJWT(req, res, next) {
   }
 }
 
-app.use(verifyJWT);
-app.use((err, req, res, next) => {
-  err ? res.status(401).json({ success: false, message: err }) : next();
-});
+// app.use(verifyJWT);
+// app.use((err, req, res, next) => {
+//   err ? res.status(401).json({ success: false, message: err }) : next();
+// });
 
 mongoose.connect(process.env.MONGO_URI, () => {
   console.log("DB CONNECTED");
 });
 
 app.get("/", (_, res) => {
-  res.status(200).json({ message: "hello" });
+  res.sendFile(__dirname + '/dist/index.html')
 });
 
 app.post("/list", async (_, res) => {
@@ -234,7 +234,8 @@ app.post("/dl", async (req, res) => {
 });
 
 app.use(history());
-app.use(serveStatic(__dirname + "/dist"));
+app.use(express.static(__dirname + "/dist/"));
+
 
 app.listen(process.env.PORT || 3000, () => {
   console.log(`STARTED AT ${process.env.PORT || 3000}`);
