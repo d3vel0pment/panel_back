@@ -1,6 +1,7 @@
-node_modules
+# node_modules
 .env
-.DS_Store
 dist
+.DS_Store
 dist-ssr
 *.local
+node_modules
