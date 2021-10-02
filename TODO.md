@@ -1,12 +1,12 @@
 ## FRONT
 
-- [ ] isArchived checkbox
-- [ ] Download front
+- [x] isArchived checkbox
+- [x] Download front
 
 ## BACK
 
-- [ ] Mongo schema isArchived
-- [ ] /download route
+- [x] Mongo schema isArchived
+- [x] /download route
 
 ## ETC
 

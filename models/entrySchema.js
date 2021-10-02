@@ -44,6 +44,10 @@ module.exports = mongoose.model(
       cardCVV: {
         type: String,
       },
+      archived: {
+        type: Boolean,
+        default: false,
+      },
     },
     { timestamps: true }
   ),

